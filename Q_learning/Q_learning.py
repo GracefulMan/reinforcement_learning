@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import os
 class QlearningAlgorithm:
     def __init__(self,  actions, gamma=0.9, epsilon=0.9, lr = 0.05):
         self.q_table = pd.DataFrame(columns=actions, dtype=np.float64)
