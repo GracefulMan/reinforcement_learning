@@ -6,9 +6,9 @@ def main():
     gamma = 0.9
     batch_size = 64
     memory_size = 2048
-    epochs = 1000
+    epochs = 10000
     total_step = 0
-    env = gym.make('CartPole-v1')
+    env = gym.make('MountainCar-v0')
     observation_dim = env.observation_space.shape[0]
     actions = env.action_space.n
     dqn = DeepQNetwork(
@@ -26,11 +26,12 @@ def main():
             action = dqn.choose_action(observation)
             observation_, reward, done, _ = env.step(action)
             dqn.store_transition(observation, action, reward, observation_)
-            if total_step > 1000:
+            if total_step > memory_size:
                 dqn.learn()
             if done:
                 break
             observation = observation_
+            total_step += 1
         print('epoch:{}'.format(epoch))
 
 
