@@ -1,14 +1,16 @@
 from DQN.dqn import DeepQNetwork
 import gym
 
+
 def main():
-    epsilon = 0.8
+    epsilon = 0.7
     gamma = 0.9
-    batch_size = 64
-    memory_size = 2048
+    batch_size = 1024
+    memory_size = 4096
     epochs = 10000
     total_step = 0
-    env = gym.make('MountainCar-v0')
+    lr = 0.01
+    env = gym.make('CartPole-v0')
     observation_dim = env.observation_space.shape[0]
     actions = env.action_space.n
     dqn = DeepQNetwork(
@@ -17,7 +19,8 @@ def main():
         epsilon=epsilon,
         gamma=gamma,
         batch_size=batch_size,
-        memory_size=memory_size
+        memory_size=memory_size,
+        lr=lr
     )
     for epoch in range(epochs):
         observation = env.reset()
@@ -33,9 +36,6 @@ def main():
             observation = observation_
             total_step += 1
         print('epoch:{}'.format(epoch))
-
-
-
 
 
 if __name__ == "__main__":
