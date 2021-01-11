@@ -1,4 +1,4 @@
-from Actor_Critic.model import ActorCriticNet
+from Actor_Critic.model_v2 import ActorCriticNet
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,22 +16,22 @@ def plot_reward(reward_history: list, window: int=5) -> None:
 
 def main():
     gamma = 0.9
-    epochs = 2500
-    env = gym.make('CartPole-v1')
-    observation_dim = env.observation_space.shape[0]
+    epochs = 500
+    env = gym.make('MsPacman-v0')
+    observation_dim = env.observation_space.shape
     actions = env.action_space.n
-    Agent = ActorCriticNet(observation_dims=observation_dim,actions=actions,gamma=gamma)
+    Agent = ActorCriticNet(observation_dims=observation_dim,actions=actions, gamma=gamma)
     score_history = []
     for epoch in range(epochs):
         score = 0
         observation = env.reset()
         while True:
-            if epoch > 2490:
+            if epoch > 400:
                 env.render()
             action = Agent.choose_action(observation)
             observation_, reward, done, _ = env.step(action)
             score += reward
-            Agent.learn(observation,reward,observation_,done)
+            Agent.learn(observation, reward, observation_, done)
             if done:
                 break
             observation = observation_
