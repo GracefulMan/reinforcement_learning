@@ -25,7 +25,7 @@ def main():
         actions = []
         rewards = []
         while True:
-            if epoch > 1000:
+            if epoch > 5000:
                 env.render()
             action = agent.choose_action(observation)
             observation_, reward, done, _ = env.step(action)
@@ -33,6 +33,7 @@ def main():
             actions.append(action)
             rewards.append(reward)
             if done:
+                print(len(actions))
                 agent.learn(obs, actions, rewards)
                 break
             observation = observation_
