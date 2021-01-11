@@ -6,7 +6,7 @@ Author: GracefulMan
 import torch
 import torch.nn as nn
 import numpy as np
-
+import torch.nn.functional as F
 
 class GenericNet(nn.Module):
     '''
@@ -16,9 +16,8 @@ class GenericNet(nn.Module):
                  input_dims: int,
                  output_dims: int,
                  lr: float = 1e-4,
-                 fc1_dims: int = 128,
-                 fc2_dims: int = 32,
-                 name: str = 'critic'
+                 fc1_dims: int = 32,
+                 fc2_dims: int = 16
                  ) -> None:
         super(GenericNet, self).__init__()
         self.lr = lr
@@ -31,12 +30,8 @@ class GenericNet(nn.Module):
             nn.ReLU()
         )
         # critic network's output is a critic value. don't want to use softmax.
-        self.fc3 = nn.Sequential(
-            nn.Linear(fc2_dims, output_dims),
-            nn.Softmax()
-        ) if name == 'actor' else nn.Sequential(
-            nn.Linear(fc2_dims, output_dims),
-        )
+        self.fc3 = nn.Linear(fc2_dims, output_dims)
+
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu:0')
         self.to(self.device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -56,7 +51,7 @@ class ActorCriticNet:
         self.gamma = gamma
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
-        self.actor = GenericNet(input_dims=observation_dims, output_dims=actions, lr=self.actor_lr, name='actor')
+        self.actor = GenericNet(input_dims=observation_dims, output_dims=actions, lr=self.actor_lr)
         self.critic = GenericNet(input_dims=observation_dims, output_dims=1, lr=self.critic_lr)
         self.log_probs = None
 
@@ -66,7 +61,7 @@ class ActorCriticNet:
         observation: current state
         return: action, type: int
         '''
-        probablities = self.actor.forward(observation)
+        probablities =F.softmax(self.actor.forward(observation))
         action_probs = torch.distributions.Categorical(probablities)
         action = action_probs.sample()
         self.log_probs =action_probs.log_prob(action)

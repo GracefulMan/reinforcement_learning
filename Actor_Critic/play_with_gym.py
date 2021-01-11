@@ -1,10 +1,16 @@
 from Actor_Critic.model import ActorCriticNet
 import gym
 import matplotlib.pyplot as plt
+import numpy as np
 
-
-def plot_reward(reward_history: list) -> None:
-    plt.plot(list(range(len(reward_history))), reward_history)
+def plot_reward(reward_history: list, window: int=5) -> None:
+    N = len(reward_history)
+    running_avg = np.empty(N)
+    for t in range(N):
+        running_avg[t] = np.mean(reward_history[max(0, t - window): (t + 1)])
+    plt.plot(list(range(len(reward_history))), running_avg)
+    plt.ylabel('Score')
+    plt.xlabel('Game')
     plt.show()
 
 
@@ -30,8 +36,9 @@ def main():
                 break
             observation = observation_
         score_history.append(score)
-        print('epoch:{}'.format(epoch))
+        print('epoch:{},score:{:.2f}'.format(epoch, score))
     plot_reward(reward_history=score_history)
+
 
 if __name__ == "__main__":
     main()
