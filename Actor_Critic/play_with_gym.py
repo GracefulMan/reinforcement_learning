@@ -16,17 +16,17 @@ def plot_reward(reward_history: list, window: int=5) -> None:
 
 def main():
     gamma = 0.9
-    epochs = 500
+    epochs = 1000
     env = gym.make('MsPacman-v0')
     observation_dim = env.observation_space.shape
     actions = env.action_space.n
-    Agent = ActorCriticNet(observation_dims=observation_dim,actions=actions, gamma=gamma)
+    Agent = ActorCriticNet(observation_dims=observation_dim[2],actions=actions, gamma=gamma)
     score_history = []
     for epoch in range(epochs):
         score = 0
         observation = env.reset()
         while True:
-            if epoch > 400:
+            if epoch > epochs - 50:
                 env.render()
             action = Agent.choose_action(observation)
             observation_, reward, done, _ = env.step(action)
