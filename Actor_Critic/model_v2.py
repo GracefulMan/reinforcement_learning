@@ -30,7 +30,7 @@ class ActorCriticNet(nn.Module):
         )
         self.fc1 = nn.Linear(11264, actions)
         self.fc2 = nn.Linear(11264 , 1)
-        self.device = torch.device('gpu:0' if torch.cuda.is_available() else 'cpu:0')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu:0')
         self.to(self.device)
         self.optimizer = torch.optim.RMSprop(self.parameters(), self.lr)
 
