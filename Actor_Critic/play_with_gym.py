@@ -26,8 +26,7 @@ def main():
         score = 0
         observation = env.reset()
         while True:
-            if epoch > epochs - 50:
-                env.render()
+            env.render()
             action = Agent.choose_action(observation)
             observation_, reward, done, _ = env.step(action)
             score += reward
