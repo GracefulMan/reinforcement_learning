@@ -9,8 +9,8 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True' # MACOS setting.
 # TODO: use MC doesn't work well, need to use TD-based methods.
 
 def main():
-    epochs = 20000
-    env = gym.make('CartPole-v0')
+    epochs = 1000
+    env = gym.make('Acrobot-v1')
     observation_dim = env.observation_space.shape[0]
     actions = env.action_space.n
     agent = PPO(
@@ -18,7 +18,7 @@ def main():
         n_actions=actions
     )
     n_steps = 0
-    N = 50
+    N = 100
     learn_iters = 0
     score_history = []
     for epoch in range(epochs):
@@ -26,6 +26,8 @@ def main():
         done = False
         score = 0
         while not done:
+            if epoch > epochs - 10:
+                env.render()
             action, prob, value = agent.choose_action(observation)
             observation_, reward, done, info = env.step(action)
             agent.remember(observation, action, value, prob, reward, done)
@@ -39,7 +41,7 @@ def main():
         avg_score = np.mean(score_history[-100:])
         if epoch % 10 == 0: print('epoch:{}, score:{:.2f},avg_score:{:.2f}'.format(epoch, score, avg_score))
     x = [i+1 for i in range(len(score_history))]
-    plot_learning_curve(x, score_history, 'cartpole.png')
+    plot_learning_curve(x, score_history, 'MountainCar.png')
 
 
 if __name__ == "__main__":

@@ -100,8 +100,8 @@ class PPO:
                  n_actions: int,
                  batch_size: int = 64,
                  policy_clip: float = 0.2,
-                 gamma: float = 0.9,
-                 lr: float = 1e-3,
+                 gamma: float = 0.99,
+                 lr: float = 1e-4,
                  gae_lambda: float = 0.95,
                  n_epochs: int = 10
                  ) -> None:
@@ -145,6 +145,8 @@ class PPO:
                 for k in range(t, len(reward_arr) - 1):
                     a_t += discount * (reward_arr[k] + self.gamma * values[k+1] * (1 - int(done_arr[k])) - values[k])
                     discount *= self.gamma * self.gae_lambda
+                advantage[t] = a_t
+
             advantage = torch.Tensor(advantage).to(torch.device(self.device))
             values = torch.Tensor(values).to(torch.device(self.device))
             for batch in batches:
