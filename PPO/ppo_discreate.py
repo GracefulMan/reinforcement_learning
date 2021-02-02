@@ -1,10 +1,11 @@
-'''
-implementaion of PPO2
-'''
 import torch
 import torch.nn as nn
-import numpy as np
+import os
 from typing import Tuple
+import numpy as np
+'''
+implement PPO algorithm for my navigation.
+'''
 
 
 class PPOMemory:
@@ -53,45 +54,49 @@ class PPOMemory:
         self.dones = []
 
 
-class ActorNetwork(nn.Module):
-    def __init__(self,  input_dims: int, n_actions: int, lr:float=1e-3,device: str='cpu') -> None:
-        super(ActorNetwork, self).__init__()
-        self.hidden = 128
+class ActorCriticNetwork(nn.Module):
+
+    def __init__(self, input_dims: int, n_actions: int, weight_name: str = 'ppo', hidden_dim=512,
+                 lr: float = 1e-3) -> None:
+        super(ActorCriticNetwork, self).__init__()
         self.lr = lr
+        self.weight_name = weight_name
+        self.root_path = 'weights/'  # save model weights
+        self.fc = nn.Sequential(
+            nn.Linear(input_dims, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, int(hidden_dim / 2)),
+            nn.ReLU(),
+            nn.Linear(int(hidden_dim / 2), int(hidden_dim / 4)),
+            nn.ReLU()
+        )
         self.actor = nn.Sequential(
-            nn.Linear(input_dims, self.hidden * 2),
-            nn.ReLU(),
-            nn.Linear(self.hidden * 2, self.hidden),
-            nn.ReLU(),
-            nn.Linear(self.hidden, n_actions),
+            nn.Linear(int(hidden_dim / 4), n_actions),
             nn.Softmax(dim=1)
         )
+        self.critic = nn.Linear(int(hidden_dim / 4), 1)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        self.to(device=torch.device(device=device))
+        self.load_model_weight()
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
-    def forward(self, x) -> torch.distributions.Categorical:
-        x = self.actor(x)
-        dist = torch.distributions.Categorical(x)
-        return dist
+    def save_model_weight(self) -> None:
+        if not os.path.exists(self.root_path):
+            os.makedirs(self.root_path)
+        weight_path = os.path.join(self.root_path, self.weight_name) + '.weight'
+        torch.save(self.state_dict(), weight_path)
 
+    def load_model_weight(self) -> None:
+        weight_path = os.path.join(self.root_path, self.weight_name) + '.weight'
+        if os.path.exists(weight_path):
+            self.load_state_dict(torch.load(weight_path))
 
-class CriticNetwork(nn.Module):
-    def __init__(self, input_dims: int, lr: float=1e-4, device: str='cpu' ) -> None:
-        super(CriticNetwork, self).__init__()
-        self.lr = lr
-        self.hidden = 128
-        self.critic = nn.Sequential(
-            nn.Linear(input_dims, self.hidden * 2),
-            nn.ReLU(),
-            nn.Linear(self.hidden * 2, self.hidden),
-            nn.ReLU(),
-            nn.Linear(self.hidden, 1)
-        )
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        self.to(device=torch.device(device=device))
+    def forward(self, x):
+        x = self.fc(x)
+        dist = torch.distributions.Categorical(self.actor(x))
+        value = self.critic(x)
+        return dist, value
 
-    def forward(self, x) -> torch.Tensor:
-        return self.critic(x)
 
 
 class PPO:
@@ -110,15 +115,13 @@ class PPO:
         self.gae_lambda = gae_lambda
         self.n_epochs = n_epochs
         self.gamma = gamma
-        self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        self.actor = ActorNetwork(input_dims=input_dims, n_actions=n_actions, lr=lr, device=self.device)
-        self.critic = CriticNetwork(input_dims=input_dims, lr=lr, device=self.device)
+        self.ActorCritic = ActorCriticNetwork(input_dims, n_actions, lr=lr)
         self.memory = PPOMemory(batch_size=self.batch_size)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     def choose_action(self, observation: np.ndarray) -> Tuple[int, float, float]:
-        observation = torch.Tensor([observation]).to(torch.device(self.device))
-        dist = self.actor(observation)
-        value = self.critic(observation)
+        observation = torch.Tensor([observation]).to(self.device)
+        dist, value = self.ActorCritic(observation)
         action = dist.sample()
         prob = torch.squeeze(dist.log_prob(action)).item()
         action = torch.squeeze(action).item()
@@ -153,9 +156,9 @@ class PPO:
                 observations = torch.Tensor(observation_arr[batch]).to(torch.device(self.device))
                 old_probs = torch.Tensor(old_prob_arr[batch]).to(torch.device(self.device))
                 actions = torch.Tensor(action_arr[batch]).to(torch.device(self.device))
-                dist = self.actor(observations)
+                dist, value = self.ActorCritic(observations)
                 new_probs = dist.log_prob(actions)
-                critic_value = torch.squeeze(self.critic(observations))
+                critic_value = torch.squeeze(value)
                 prob_ratio = torch.exp(new_probs - old_probs)
                 weighted_probs = prob_ratio * advantage[batch]
                 cliped_weighted_probs = torch.clip(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * advantage[batch]
@@ -163,10 +166,11 @@ class PPO:
                 returns = advantage[batch] + values[batch]
                 critic_loss = torch.mean((returns - critic_value) ** 2)
                 total_loss = actor_loss + 0.5 * critic_loss
-                self.actor.optimizer.zero_grad()
-                self.critic.optimizer.zero_grad()
+                self.ActorCritic.optimizer.zero_grad()
                 total_loss.backward()
-                self.actor.optimizer.step()
-                self.critic.optimizer.step()
+                self.ActorCritic.optimizer.step()
 
         self.memory.clear_memory()
+
+
+

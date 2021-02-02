@@ -1,4 +1,4 @@
-from PPO.ppo import PPO
+from PPO.ppo_discreate import PPO
 from PPO.utils import plot_learning_curve
 import gym
 import os # MACOS setting.
@@ -9,8 +9,8 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True' # MACOS setting.
 # TODO: use MC doesn't work well, need to use TD-based methods.
 
 def main():
-    epochs = 1000
-    env = gym.make('Acrobot-v1')
+    epochs = 800
+    env = gym.make('CartPole-v0')
     observation_dim = env.observation_space.shape[0]
     actions = env.action_space.n
     agent = PPO(
@@ -41,7 +41,7 @@ def main():
         avg_score = np.mean(score_history[-100:])
         if epoch % 10 == 0: print('epoch:{}, score:{:.2f},avg_score:{:.2f}'.format(epoch, score, avg_score))
     x = [i+1 for i in range(len(score_history))]
-    plot_learning_curve(x, score_history, 'MountainCar.png')
+    plot_learning_curve(x, score_history, 'MountainCar1.png')
 
 
 if __name__ == "__main__":
