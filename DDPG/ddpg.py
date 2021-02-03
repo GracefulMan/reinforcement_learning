@@ -15,9 +15,8 @@ class OUActionNoise:
         self.x0 = x0
         self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
 
-
     def __call__(self, *args, **kwargs):
-        x = self.x_prev + self.theta* (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
+        x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
         self.x_prev = x
         return x
 
@@ -55,6 +54,7 @@ class ReplayBuffer:
         self.reward_memory[index] = reward
         self.states_memory_[index] = state_
         self.terminal_memory[index] = done
+        self.counter += 1
 
     def sample_buffer(self, batch_size: int) -> Tuple:
         """
@@ -190,11 +190,11 @@ class DDPG:
         if self.memory.counter < self.batch_size:
             return
         state, action, reward, state_, done = self.memory.sample_buffer(batch_size=self.batch_size)
-        reward = torch.Tensor(reward, dtype=torch.float).to(self.critic.device)
+        reward = torch.Tensor(reward).to(self.critic.device)
         done = torch.Tensor(done).to(self.critic.device)
-        state_ = torch.Tensor(state_, dtype=torch.float).to(self.critic.device)
-        action = torch.Tensor(action, dtype=torch.float).to(self.critic.device)
-        state = torch.Tensor(state, dtype=torch.float).to(self.critic.device)
+        state_ = torch.Tensor(state_).to(self.critic.device)
+        action = torch.Tensor(action).to(self.critic.device)
+        state = torch.Tensor(state).to(self.critic.device)
         self.target_actor.eval()
         self.target_critic.eval()
         self.critic.eval()
@@ -209,7 +209,8 @@ class DDPG:
         # loss func
         self.critic.train()
         self.critic.optimizer.zero_grad()
-        critic_loss = F.mse_loss(target, critic_value)
+
+        critic_loss = nn.MSELoss()(target, critic_value)
         critic_loss.backward()
         self.critic.optimizer.step()
 
