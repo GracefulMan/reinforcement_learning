@@ -8,7 +8,7 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True' # MACOS setting.
 
 
 def main():
-    epochs = 1000
+    epochs = 10000
     env = gym.make('LunarLanderContinuous-v2')
     agent = DDPG(input_dims=8, n_actions=2, tau=0.001, batch_size=64, lr=1e-4)
     score_history = []
@@ -26,6 +26,7 @@ def main():
         score_history.append(score)
         avg_score = np.mean(score_history[-100:])
         if epoch % 10 == 0: print('epoch:{}, score:{:.2f},avg_score:{:.2f}'.format(epoch, score, avg_score))
+    agent.save_models()
     x = [i+1 for i in range(len(score_history))]
     plot_learning_curve(x, score_history, 'LunarLanderContinuous.png')
 
