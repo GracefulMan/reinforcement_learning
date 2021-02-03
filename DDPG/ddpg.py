@@ -8,12 +8,13 @@ import os
 
 class OUActionNoise:
     def __init__(self, mu:np.ndarray, sigma: float=0.15, theta: float=0.2, dt: float=1e-2, x0:np.ndarray=None) -> None:
-        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
         self.mu = mu
         self.sigma = sigma
         self.theta = theta
         self.dt = dt
         self.x0 = x0
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+
 
     def __call__(self, *args, **kwargs):
         x = self.x_prev + self.theta* (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
@@ -74,6 +75,8 @@ class CriticNetwork(nn.Module):
     def __init__(self, input_dims: int, n_actions: int, name: str,lr: float=1e-3, chkpt: str='model/ddpg') -> None:
         super(CriticNetwork, self).__init__()
         self.chkpt_path = os.path.join(chkpt, name + '_ddpg')
+        if not os.path.exists(chkpt):
+            os.makedirs(chkpt)
         fc1_dim = 128
         fc2_dim = 64
         self.fc1 = self._linear_layer(input_dims, fc1_dim)
@@ -90,7 +93,10 @@ class CriticNetwork(nn.Module):
         torch.nn.init.uniform_(layer.weight.data, -tmp_value, tmp_value)
         torch.nn.init.uniform_(layer.bias.data, -tmp_value, tmp_value)
         if bn:
-            layer = nn.LayerNorm(input_dims)(layer)
+            layer = nn.Sequential(
+                layer,
+                nn.LayerNorm(output_dims)
+            )
         return layer
 
     def forward(self, state:np.ndarray, action:float) -> torch.Tensor:
@@ -114,6 +120,9 @@ class CriticNetwork(nn.Module):
 class ActorNetwork(nn.Module):
     def __init__(self, input_dims:int, n_actions:int, name: str, lr: float=1e-3, chkpt:str='model/ddpg' )-> None:
         super(ActorNetwork, self).__init__()
+        self.chkpt_path = os.path.join(chkpt, name + '_ddpg')
+        if not os.path.exists(chkpt):
+            os.makedirs(chkpt)
         fc1_dim = 128
         fc2_dim = 64
         self.fc1 = self._linear_layer(input_dims, fc1_dim)
@@ -129,7 +138,11 @@ class ActorNetwork(nn.Module):
         torch.nn.init.uniform_(layer.weight.data, -tmp_value, tmp_value)
         torch.nn.init.uniform_(layer.bias.data, -tmp_value, tmp_value)
         if bn:
-            layer = nn.LayerNorm(input_dims)(layer)
+            layer = nn.Sequential(
+                layer,
+                nn.LayerNorm(output_dims)
+            )
+
         return layer
 
     def forward(self, state:np.ndarray) -> torch.Tensor:
@@ -137,6 +150,7 @@ class ActorNetwork(nn.Module):
         x = torch.relu(self.fc2(x))
         x = torch.tanh(self.mu(x))
         return x
+
     def save_checkpoint(self) -> None:
         print('...save checkpoints...')
         torch.save(self.state_dict(), self.chkpt_path)
@@ -148,7 +162,7 @@ class ActorNetwork(nn.Module):
 
 
 class DDPG:
-    def __init__(self, input_dims:int, n_actions:int ,tau, env, lr:float=1e-3, gamma: float=0.99, max_buffer_size=1000000, batch_size=64) -> None:
+    def __init__(self, input_dims:int, n_actions:int, tau, lr: float=1e-3, gamma: float=0.99, max_buffer_size=1000000, batch_size=64) -> None:
         self.gamma = gamma
         self.tau =tau
         self.memory = ReplayBuffer(max_size=max_buffer_size, input_shape=input_dims, n_actions=n_actions)
@@ -156,7 +170,87 @@ class DDPG:
         self.actor = ActorNetwork(input_dims, n_actions, 'Actor', lr=lr)
         self.target_actor = ActorNetwork(input_dims, n_actions, 'TargetActor', lr=lr)
         self.critic = CriticNetwork(input_dims,n_actions,'Critic',lr=lr)
+        self.target_critic = CriticNetwork(input_dims,n_actions,'Target Critic',lr=lr)
+
         self.noise = OUActionNoise(mu=np.zeros(n_actions))
         self.update_network_parameters(tau=1)
 
+    def choose_action(self, observation:np.ndarray) -> np.ndarray:
+        self.actor.eval()
+        observation = torch.tensor(observation, dtype=torch.float).to(self.actor.device)
+        mu = self.actor(observation).to(self.actor.device)
+        mu_prime = mu + torch.tensor(self.noise(), dtype=torch.float).to(self.actor.device)
+        self.actor.train()
+        return mu_prime.cpu().detach().numpy()
 
+    def remember(self, state: np.ndarray, action, reward: float, state_: np.ndarray, done: bool) -> None:
+        self.memory.store_transition(state,action,reward,state_, done)
+
+    def learn(self) -> None:
+        if self.memory.counter < self.batch_size:
+            return
+        state, action, reward, state_, done = self.memory.sample_buffer(batch_size=self.batch_size)
+        reward = torch.Tensor(reward, dtype=torch.float).to(self.critic.device)
+        done = torch.Tensor(done).to(self.critic.device)
+        state_ = torch.Tensor(state_, dtype=torch.float).to(self.critic.device)
+        action = torch.Tensor(action, dtype=torch.float).to(self.critic.device)
+        state = torch.Tensor(state, dtype=torch.float).to(self.critic.device)
+        self.target_actor.eval()
+        self.target_critic.eval()
+        self.critic.eval()
+        target_actions = self.target_actor(state_)
+        critic_value_ = self.target_critic(state_, target_actions)
+        critic_value = self.critic(state, action)
+        target = []
+        for j in range(self.batch_size):
+            target.append(reward[j] + self.gamma * critic_value_[j] * (1 - done[j]))
+        target = torch.tensor(target).to(self.critic.device)
+        target = target.view(self.batch_size, 1)
+        # loss func
+        self.critic.train()
+        self.critic.optimizer.zero_grad()
+        critic_loss = F.mse_loss(target, critic_value)
+        critic_loss.backward()
+        self.critic.optimizer.step()
+
+        self.critic.eval()
+        self.actor.optimizer.zero_grad()
+        mu = self.actor(state)
+        self.actor.train()
+        actor_loss = -self.critic(state, mu)
+        actor_loss = torch.mean(actor_loss)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        self.update_network_parameters()
+
+    def update_network_parameters(self, tau:float=None) -> None:
+        if tau is None:
+            tau = self.tau
+        actor_params = self.actor.named_parameters()
+        critic_params = self.critic.named_parameters()
+        target_actor_params = self.target_actor.named_parameters()
+        target_critic_params = self.target_critic.named_parameters()
+        critic_state_dict = dict(critic_params)
+        actor_state_dict = dict(actor_params)
+        target_critic_dict = dict(target_critic_params)
+        target_actor_dict = dict(target_actor_params)
+        for name in critic_state_dict:
+            critic_state_dict[name] = tau * critic_state_dict[name].clone()+(1-tau) * target_critic_dict[name].clone()
+        self.target_critic.load_state_dict(critic_state_dict)
+
+        for name in actor_state_dict:
+            actor_state_dict[name] = tau * actor_state_dict[name].clone() + (1 - tau) * target_actor_dict[name].clone()
+        self.target_actor.load_state_dict(actor_state_dict)
+
+    def save_models(self):
+        self.actor.save_checkpoint()
+        self.critic.save_checkpoint()
+        self.target_critic.save_checkpoint()
+        self.target_actor.save_checkpoint()
+
+    def load_models(self):
+        self.actor.load_checkpoint()
+        self.target_actor.load_checkpoint()
+        self.critic.load_checkpoint()
+        self.target_critic.load_checkpoint()
